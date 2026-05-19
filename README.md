@@ -7,6 +7,29 @@ TodoMate의 오늘 할 일을 읽어 Slack DM/채널로 보내는 Railway Cron �
 - Railway Volume 또는 Redis에 상태 저장
 - 중복 발송 방지용 날짜/모드별 marker + 실행 lock 포함
 
+## Why Railway?
+
+이 자동화는 정해진 시간에 스스로 실행되어야 합니다. 로컬 `cron`, macOS `launchd`, Windows Task Scheduler로도 비슷한 자동화를 만들 수 있지만, 그 방식은 **데스크탑/노트북이 켜져 있고 네트워크에 연결되어 있을 때만** 안정적으로 동작합니다.
+
+예를 들어 노트북을 닫아두거나, 절전 모드에 들어가거나, 전원이 꺼져 있으면 오전/저녁 리포트가 실행되지 않을 수 있습니다.
+
+Railway를 쓰는 이유는 다음과 같습니다.
+
+- 개인 노트북 상태와 무관하게 클라우드에서 cron 실행
+- Railway Volume으로 오전 snapshot을 저장하고 저녁 비교에 재사용
+- 환경변수로 TodoMate/Slack 인증 정보를 서버에 안전하게 주입
+- 배포, 로그 확인, 재실행, 스케줄 변경을 한 곳에서 관리
+
+즉, 이 프로젝트의 기본 운영 모델은 다음과 같습니다.
+
+```text
+Local laptop cron
+-> works only while your machine is awake and online
+
+Railway cron
+-> works from the cloud on schedule, even when your machine is closed/offline
+```
+
 > 현재 버전은 **1인 1 Railway 서비스**에 가장 적합합니다. 여러 사용자가 함께 쓰는 SaaS 형태로 운영하려면 사용자별 인증/설정/상태를 DB로 분리하는 리팩터가 필요합니다.
 
 ## Message format
@@ -52,12 +75,23 @@ flowchart TD
 
 ## Requirements
 
-- Railway account
+For local testing:
+
 - Slack workspace access
 - TodoMate account accessible through `mcporter`
-- Node packages:
-  - `mcporter`
-  - `agent-messenger`
+- Node.js/npm
+- Python 3
+
+For Railway deployment:
+
+- Railway account
+- Railway CLI installed and connected to your Railway account
+- Railway project with a mounted Volume at `/data`
+
+Node packages used by the app:
+
+- `mcporter`
+- `agent-messenger`
 
 The Docker image installs these automatically from `package.json`.
 
@@ -109,11 +143,50 @@ TODOMATE_RUN_MODE=morning TODOMATE_FORCE=1 python3 send-todomate-slack-report.py
 
 ## Railway deployment
 
-### 1. Create a Railway project
+### 0. Railway prerequisites
+
+The commands below assume you have a Railway account and the Railway CLI is installed on your machine.
+
+Create a Railway account:
+
+- https://railway.com
+
+Install Railway CLI:
+
+```bash
+# macOS with Homebrew
+brew install railway
+
+# or with npm
+npm install -g @railway/cli
+```
+
+Check that the CLI works:
+
+```bash
+railway --version
+```
+
+Login from your terminal:
 
 ```bash
 railway login
+```
+
+This opens a browser login flow. Complete it, then return to your terminal.
+
+### 1. Create or link a Railway project
+
+For a new Railway project:
+
+```bash
 railway init
+```
+
+For an existing Railway project:
+
+```bash
+railway link
 ```
 
 ### 2. Add a volume

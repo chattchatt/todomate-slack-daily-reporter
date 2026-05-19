@@ -32,68 +32,68 @@ Railway cron
 
 > 현재 버전은 **1인 1 Railway 서비스**에 가장 적합합니다. 여러 사용자가 함께 쓰는 SaaS 형태로 운영하려면 사용자별 인증/설정/상태를 DB로 분리하는 리팩터가 필요합니다.
 
-## Message format
+## 메시지 형식
 
-The Slack message is intentionally plain text so it works in both DMs and channels without requiring Slack Block Kit setup.
+Slack 메시지는 DM과 채널 어디서든 바로 읽을 수 있도록 단순 텍스트로 발송됩니다. 별도의 Slack Block Kit 설정은 필요하지 않습니다.
 
-### Morning / before-work report
+### 오전 / 작업 전 보고
 
-The morning report sends the TodoMate tasks scheduled for the day as a simple list.
+오전 보고는 TodoMate에 등록된 당일 예정 작업을 목록으로 보냅니다.
 
-Each task is formatted as:
-
-```text
-[Category] Task title - Duration
-```
-
-Example:
+각 작업은 다음 형식으로 표시됩니다.
 
 ```text
-[Work] Proposal review - 30m
-[Meeting] Weekly planning - 1h
-[Admin] Expense check - 10m
+[카테고리] 작업 목록 - 시간
 ```
 
-### Evening / after-work report
-
-The evening report compares the morning snapshot with the evening TodoMate state and sends only four categorized sections. It does **not** write a long diff explanation.
-
-Each item still uses the same task format:
+예시:
 
 ```text
-[Category] Task title - Duration
+[업무] 제안서 검토 - 30분
+[회의] 주간 미팅 - 1시간
+[정산] 비용 확인 - 10분
 ```
 
-Example:
+### 저녁 / 작업 후 보고
+
+저녁 보고는 오전에 저장한 스냅샷과 저녁 TodoMate 상태를 비교한 뒤, 긴 비교 설명 없이 4개 카테고리로만 나누어 보냅니다.
+
+각 항목은 오전과 동일하게 다음 형식을 사용합니다.
 
 ```text
-YYYY-MM-DD TodoMate evening report
-
-1. Scheduled tasks completed
-- [Category] Task title - Duration
-
-2. Scheduled tasks edited and completed
-- [Category] Updated task title - Duration
-
-3. Added tasks completed
-- [Category] New completed task title - Duration
-
-4. Added tasks not completed
-- [Category] New unfinished task title - Duration
+[카테고리] 작업 목록 - 시간
 ```
 
-If a section has no matching tasks, it is shown as:
+예시:
 
 ```text
-- None
+YYYY-MM-DD TodoMate 저녁 보고
+
+1. 당일 예정 작업이 완료된 것
+- [카테고리] 작업 목록 - 시간
+
+2. 예정 작업이 수정되어 완료된 것
+- [카테고리] 수정된 작업 목록 - 시간
+
+3. 추가된 작업이 완료된 것
+- [카테고리] 새로 추가된 완료 작업 - 시간
+
+4. 추가된 작업이 미완료된 것
+- [카테고리] 새로 추가된 미완료 작업 - 시간
 ```
 
-The four evening categories are:
+해당 카테고리에 표시할 작업이 없으면 다음처럼 표시됩니다.
 
-1. Tasks that were already scheduled in the morning and were completed
-2. Morning scheduled tasks that were edited and then completed
-3. Tasks added after the morning snapshot and completed
-4. Tasks added after the morning snapshot and not completed
+```text
+- 없음
+```
+
+저녁 보고의 4개 카테고리는 다음 기준으로 나뉩니다.
+
+1. 오전에 이미 예정되어 있었고, 저녁 기준 완료된 작업
+2. 오전 예정 작업이었지만 내용이 수정된 뒤 완료된 작업
+3. 오전 보고 이후 새로 추가되었고 완료된 작업
+4. 오전 보고 이후 새로 추가되었지만 아직 미완료인 작업
 
 ## How it works
 

@@ -34,28 +34,60 @@ Railway cron
 
 ## Message format
 
-### Morning
+The Slack message is intentionally plain text so it works in both DMs and channels without requiring Slack Block Kit setup.
+
+### Morning / before-work report
+
+The morning report sends the TodoMate tasks scheduled for the day as a simple list.
 
 ```text
-[WORK] proposal review - 30m
-[OPS] weekly planning - 1h
+[DAVAL] [워케이션] 서구 워케이션 후속 미팅 관련 내용 확인 - 1시간
+[NE(O)RDINARY] [Cursor] 앰버서더분께 연락드리고 추후 미팅 날짜 잡기 - 30분
+[ARK] [숲퀘] 계좌 권한 위임 가능 여부 확인 - 1시간
+[NE(O)RDINARY] [SASASA] 협업 미팅 - 1시간
+[NE(O)RDINARY] [행사] NE(O)RDINARY Codex Builder Hackathon · Supported by OpenAI Website Reference 확인 - 4시간
+[NE(O)RDINARY] [PAY] 너디너리 페이 출시 - 1시간
+[JAPAN] [계획] 행사 계획 및 소통 - 30분
+[NE(O)RDINARY] [계획] 너디너리 사업 계획 정리 및 회고 - 1시간
+[NE(O)RDINARY] [SASASA] 리마인드 메일 전송 - 10분
+[NE(O)RDINARY] [OpenAI] Gabriel Chua Linkedin 포스팅 확인 후, 해커톤 컨셉 확정 - 1시간
 ```
 
-### Evening
+### Evening / after-work report
+
+The evening report compares the morning snapshot with the evening TodoMate state and sends only four categorized sections. It does **not** write a long diff explanation.
 
 ```text
-당일 예정 작업이 완료된 것
-- ...
+2026-05-18 TodoMate 저녁 보고
 
-예정 작업이 수정되어 완료된 것
-- ...
+1. 당일 예정 작업이 완료된 것
+- 없음
 
-추가된 작업이 완료된 것
-- ...
+2. 예정 작업이 수정되어 완료된 것
+- 없음
 
-추가된 작업이 미완료된 것
-- ...
+3. 추가된 작업이 완료된 것
+- [NE(O)RDINARY] [OpenAI] Linkedin 포스팅 - 1시간
+- [ARK] [숲퀘] 계좌 권한 위임 가능 여부 확인 - 10분
+- [NE(O)RDINARY] [PAY] 너디너리 페이 MVP 개발 - 1시간
+- [NE(O)RDINARY] [행사] 너디너리 해커톤 마무리 공지글 게시 - 10분
+- [NE(O)RDINARY] [SASASA] 협업 미팅 - 1시간
+- [NE(O)RDINARY] [행사] NE(O)RDINARY Codex Builder Hackathon · Supported by OpenAI 계획안 수정 - 2시간
+- [NE(O)RDINARY] [PAY] 너디너리 페이 기능 명세 및 유저 플로우 설계 - 30분
+- [NE(O)RDINARY] [2nd BUG CMC] 홍보물 컨펌 - 10분
+- [NE(O)RDINARY] [SASASA] 리마인드 메일 전송 - 10분
+- [NE(O)RDINARY] [OpenAI] Gabriel Chua Linkedin 포스팅 확인 후, 해커톤 컨셉 확정 - 1시간
+
+4. 추가된 작업이 미완료된 것
+- 없음
 ```
+
+The four evening categories are:
+
+1. Tasks that were already scheduled in the morning and were completed
+2. Morning scheduled tasks that were edited and then completed
+3. Tasks added after the morning snapshot and completed
+4. Tasks added after the morning snapshot and not completed
 
 ## How it works
 

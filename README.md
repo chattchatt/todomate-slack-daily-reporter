@@ -111,27 +111,43 @@ flowchart TD
   I --> J[Write snapshot and success marker]
 ```
 
-## Requirements
+## 준비물
 
-For local testing:
+로컬 테스트를 위해 필요합니다.
 
-- Slack workspace access
-- TodoMate account accessible through `mcporter`
+- TodoMate 계정
+- Slack 워크스페이스 접근 권한
+- 보고를 보낼 Slack DM 또는 채널
 - Node.js/npm
 - Python 3
 
-For Railway deployment:
+Railway 배포를 위해 추가로 필요합니다.
 
-- Railway account
-- Railway CLI installed and connected to your Railway account
-- Railway project with a mounted Volume at `/data`
+- Railway 계정
+- Railway CLI 설치 및 로그인
+- `/data` 경로에 마운트된 Railway Volume
 
-Node packages used by the app:
+이 앱이 사용하는 Node 패키지는 다음과 같습니다.
 
-- `mcporter`
-- `agent-messenger`
+- `mcporter`: TodoMate 데이터를 읽기 위해 사용
+- `agent-messenger`: Slack 메시지를 보내기 위해 사용
 
-The Docker image installs these automatically from `package.json`.
+Docker 이미지는 `package.json`을 기준으로 위 패키지를 자동 설치합니다.
+
+## 신규 사용자 설정 흐름
+
+처음 사용하는 사람은 아래 순서대로 진행하면 됩니다.
+
+1. 이 저장소를 clone하고 의존성을 설치합니다.
+2. `mcporter`로 TodoMate 접근 권한을 인증합니다.
+3. `agent-slack`으로 Slack 접근 권한을 인증합니다.
+4. Slack DM 또는 채널 ID를 확인합니다.
+5. 로컬에서 dry-run으로 TodoMate 추출이 되는지 확인합니다.
+6. 로컬 인증 파일을 base64로 인코딩해 Railway 환경변수로 등록합니다.
+7. Railway Volume을 `/data`에 마운트하고 배포합니다.
+8. Railway cron이 평일 09:01 / 18:01 KST에 실행되도록 둡니다.
+
+이 과정을 마치면 개인 노트북이 꺼져 있어도 Railway에서 오전/저녁 보고가 자동 발송됩니다.
 
 ## Environment variables
 
@@ -160,14 +176,55 @@ npm install
 cp .env.example .env
 ```
 
-Authenticate the local CLIs first:
+### 1. TodoMate 인증
+
+TodoMate는 `mcporter`를 통해 읽습니다. 먼저 TodoMate MCP 서버 설정을 만듭니다.
 
 ```bash
-npx mcporter --help
+mkdir -p ~/.mcporter
+cat > ~/.mcporter/mcporter.json <<'JSON'
+{"mcpServers":{"mcp-gateway":{"baseUrl":"https://playmcp.kakao.com/mcp","auth":"oauth"}}}
+JSON
+```
+
+그 다음 브라우저 OAuth 흐름으로 인증합니다.
+
+```bash
+npx mcporter auth mcp-gateway
+```
+
+TodoMate 접근이 되는지 확인합니다.
+
+```bash
+npx mcporter call mcp-gateway.TodoMate-loadGoals
+```
+
+### 2. Slack 인증
+
+Slack 메시지는 `agent-slack` CLI로 보냅니다. Slack Desktop 앱 또는 지원되는 Chromium 브라우저에 로그인되어 있어야 합니다.
+
+```bash
+npx agent-slack auth extract
 npx agent-slack auth status --pretty
 ```
 
-Then run a dry test:
+### 3. Slack DM/채널 ID 확인
+
+보고를 받을 대상의 ID를 확인합니다.
+
+```bash
+# 공개 채널 목록 확인
+npx agent-slack channel list --type public --pretty
+
+# DM 목록 확인
+npx agent-slack channel list --type dm --pretty
+```
+
+`TODOMATE_SLACK_CHANNEL_ID`에는 보낼 대상의 ID를 넣습니다. 일반적으로 DM은 `D`로, 채널은 `C`로 시작합니다.
+
+### 4. 로컬 dry-run
+
+TodoMate 추출과 메시지 포맷이 정상인지 먼저 dry-run으로 확인합니다.
 
 ```bash
 TODOMATE_RUN_MODE=morning TODOMATE_FORCE=1 python3 send-todomate-slack-report.py morning --dry-run --force

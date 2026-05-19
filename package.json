@@ -1,0 +1,12 @@
+{
+  "name": "todomate-slack-daily-reporter",
+  "version": "0.1.0",
+  "description": "Railway cron wrapper for TodoMate daily Slack reports",
+  "scripts": {
+    "start": "./run.sh"
+  },
+  "dependencies": {
+    "agent-messenger": "2.10.2",
+    "mcporter": "0.10.1"
+  }
+}

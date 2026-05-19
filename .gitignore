@@ -1,0 +1,13 @@
+.env
+*.env
+__pycache__/
+*.py[cod]
+.DS_Store
+.railway/
+node_modules/
+/data/
+state/
+logs/
+*.log
+credentials.json
+slack-credentials.json

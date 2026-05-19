@@ -583,7 +583,7 @@ def scheduled_guard(mode: str, force: bool) -> None:
     current = now_local()
     if current.weekday() >= 5:
         raise SystemExit(f"skip: weekend in {SETTINGS.timezone_name}")
-    expected = {"morning": (10, 1), "evening": (19, 1)}.get(mode)
+    expected = {"morning": (9, 1), "evening": (18, 1)}.get(mode)
     if expected:
         tolerance = int(os.environ.get("TODOMATE_SCHEDULE_TOLERANCE_MINUTES", "10"))
         current_minutes = current.hour * 60 + current.minute

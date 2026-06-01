@@ -11,3 +11,5 @@ logs/
 *.log
 credentials.json
 slack-credentials.json
+.pytest_cache/
+.deepeval/

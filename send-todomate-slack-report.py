@@ -537,6 +537,19 @@ def append_category(lines: list[str], title: str, items: list[TodoItem]) -> None
 def format_evening_message(day: datetime, current_items: list[TodoItem]) -> str:
     morning = read_json(snapshot_path(day, "morning"))
     morning_items = morning.get("items", []) if morning else []
+    if not morning_items:
+        completed = [item for item in current_items if item.is_done]
+        incomplete = [item for item in current_items if not item.is_done]
+        lines = [
+            f"{day.strftime('%Y-%m-%d')} TodoMate 저녁 보고",
+            "",
+            "※ 오늘 오전 스냅샷이 없어, 현재 TodoMate 상태 기준으로 보고합니다.",
+            "",
+        ]
+        append_category(lines, "1. 완료된 작업", completed)
+        append_category(lines, "2. 미완료된 작업", incomplete)
+        return "\n".join(lines).rstrip()
+
     morning_by_id = {
         str(item.get("id")): item for item in morning_items if isinstance(item, dict) and item.get("id")
     }
@@ -547,7 +560,9 @@ def format_evening_message(day: datetime, current_items: list[TodoItem]) -> str:
     }
 
     planned_completed: list[TodoItem] = []
+    planned_incomplete: list[TodoItem] = []
     modified_completed: list[TodoItem] = []
+    modified_incomplete: list[TodoItem] = []
     added_completed: list[TodoItem] = []
     added_incomplete: list[TodoItem] = []
 
@@ -559,10 +574,15 @@ def format_evening_message(day: datetime, current_items: list[TodoItem]) -> str:
         if isinstance(morning_raw, dict):
             morning_content = str(morning_raw.get("content") or "")
             same_content = morning_content == item.content
-            if item.is_done and same_content:
-                planned_completed.append(item)
-            elif item.is_done and not same_content:
+            if same_content:
+                if item.is_done:
+                    planned_completed.append(item)
+                else:
+                    planned_incomplete.append(item)
+            elif item.is_done:
                 modified_completed.append(item)
+            else:
+                modified_incomplete.append(item)
             continue
 
         if item.is_done:
@@ -572,9 +592,11 @@ def format_evening_message(day: datetime, current_items: list[TodoItem]) -> str:
 
     lines = [f"{day.strftime('%Y-%m-%d')} TodoMate 저녁 보고", ""]
     append_category(lines, "1. 당일 예정 작업이 완료된 것", planned_completed)
-    append_category(lines, "2. 예정 작업이 수정되어 완료된 것", modified_completed)
-    append_category(lines, "3. 추가된 작업이 완료된 것", added_completed)
-    append_category(lines, "4. 추가된 작업이 미완료된 것", added_incomplete)
+    append_category(lines, "2. 당일 예정 작업이 미완료된 것", planned_incomplete)
+    append_category(lines, "3. 예정 작업이 수정되어 완료된 것", modified_completed)
+    append_category(lines, "4. 예정 작업이 수정되어 미완료된 것", modified_incomplete)
+    append_category(lines, "5. 추가된 작업이 완료된 것", added_completed)
+    append_category(lines, "6. 추가된 작업이 미완료된 것", added_incomplete)
     return "\n".join(lines).rstrip()
 
 def scheduled_guard(mode: str, force: bool) -> None:
@@ -614,7 +636,7 @@ def send_slack_message_via_agent_slack(message: str) -> None:
         raise RecoverableError(
             "slack_channel_missing",
             "Slack channel ID is not configured",
-            "TODOMATE_SLACK_CHANNEL_ID에 Slack DM 또는 채널 ID를 설정하세요.",
+            "TODOMATE_SLACK_CHANNEL_ID에 Slack DM/채널 ID를 설정하세요.",
         )
 
     agent_slack = resolve_command(SETTINGS.agent_slack_candidates)
@@ -715,6 +737,79 @@ def send_slack_message(message: str) -> None:
     )
 
 
+def env_enabled(name: str, default: str = "1") -> bool:
+    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def failure_alert_marker_path(day: datetime, mode: str, code: str) -> Path:
+    safe_code = re.sub(r"[^a-zA-Z0-9_.-]+", "_", code).strip("._") or "unknown"
+    return SETTINGS.state_dir / day.strftime("%Y-%m-%d") / f"{mode}.{safe_code}.failure-alert.json"
+
+
+def should_send_failure_alert(mode: str, exc: RecoverableError) -> bool:
+    """Throttle closed-loop failure DMs to one alert per day/mode/error.
+
+    Railway retries every five minutes inside the morning/evening window. That
+    is useful for recovery, but the Slack DM should show one clear failure
+    signal instead of a wall of repeated warnings.
+    """
+    marker = failure_alert_marker_path(now_local(), mode, exc.code)
+    if marker.exists():
+        log_event("info", "failure_alert_suppressed", mode=mode, original_error=exc.code)
+        return False
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    write_json(marker, {"created_at": now_local().isoformat(), "mode": mode, "error": exc.code})
+    return True
+
+
+def send_failure_alert_to_slack(mode: str, exc: RecoverableError) -> None:
+    """Best-effort failure alert that keeps TodoMate errors visible in the configured Slack target.
+
+    This intentionally bypasses ``send_slack_message`` to avoid recursion through
+    the normal report-send path. If Slack itself is the failing component, the
+    alert is skipped and Railway logs remain the source of truth.
+    """
+    if not env_enabled("TODOMATE_FAILURE_ALERT_TO_SLACK", "1"):
+        return
+    if exc.code.startswith("agent_slack") or exc.code in {"slack_channel_missing", "slack_send_method_invalid"}:
+        return
+    if not SETTINGS.slack_channel_id:
+        return
+    agent_slack = resolve_command(SETTINGS.agent_slack_candidates)
+    if not agent_slack:
+        return
+    if not should_send_failure_alert(mode, exc):
+        return
+
+    message = (
+        f":warning: TodoMate Slack daily report failed ({mode})\n"
+        f"- 오류: `{exc.code}`\n"
+        f"- 조치: {exc.action}\n"
+        f"- 시각: {now_local().isoformat()}\n"
+        "_Railway closed-loop 재시도 창 안이면 다음 cron tick에서 자동 재시도합니다._"
+    )
+    try:
+        proc = subprocess.run(
+            [agent_slack, "message", "send", SETTINGS.slack_channel_id, message],
+            text=True,
+            capture_output=True,
+            timeout=20,
+        )
+    except Exception as alert_exc:
+        log_event("error", "failure_alert_exception", mode=mode, error=str(alert_exc))
+        return
+    if proc.returncode == 0:
+        log_event("info", "failure_alert_sent", mode=mode, original_error=exc.code)
+    else:
+        log_event(
+            "error",
+            "failure_alert_failed",
+            mode=mode,
+            original_error=exc.code,
+            detail=(proc.stderr.strip() or proc.stdout.strip())[:500],
+        )
+
+
 def agent_slack_auth_status(agent_slack: str | None) -> tuple[bool, str]:
     if not agent_slack:
         return False, "agent-slack missing"
@@ -796,13 +891,6 @@ def execute(mode: str, dry_run: bool, force: bool) -> int:
             log_event("info", "skip_duplicate", mode=mode, date=day.strftime("%Y-%m-%d"))
             return 0
 
-        if mode == "evening" and not dry_run and not force and not state_exists(marker_path(day, "morning")):
-            raise RecoverableError(
-                "morning_send_missing",
-                "morning success marker is missing for today's evening report",
-                "오늘 오전 보고의 실제 전송 성공 기록이 없어서 저녁 보고를 중단했습니다. 오전 목록을 먼저 전송하거나 수동 확인 후 force 실행하세요.",
-            )
-
         items = load_items(day)
         if mode == "morning":
             message = format_morning_message(items)
@@ -833,6 +921,7 @@ def main() -> int:
         return execute(args.mode, dry_run=args.dry_run, force=args.force)
     except RecoverableError as exc:
         log_event("error", exc.code, message=str(exc), action=exc.action, mode=args.mode)
+        send_failure_alert_to_slack(args.mode, exc)
         notify("TodoMate Slack DM 자동화 실패", f"{exc.code}: {exc.action}")
         print(f"{exc.code}: {exc}\nAction: {exc.action}", file=sys.stderr)
         return 2

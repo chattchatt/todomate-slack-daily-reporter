@@ -7,8 +7,8 @@ RUN apt-get update \
 WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev
-COPY send-todomate-slack-report.py run.sh ./
-RUN chmod +x ./run.sh ./send-todomate-slack-report.py
+COPY send-todomate-slack-report.py hermes_playmcp_healthcheck.py run.sh ./
+RUN chmod +x ./run.sh ./send-todomate-slack-report.py ./hermes_playmcp_healthcheck.py
 
 ENV PATH="/app/node_modules/.bin:${PATH}"
 CMD ["./run.sh"]

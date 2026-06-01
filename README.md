@@ -3,7 +3,7 @@
 TodoMate의 오늘 할 일을 읽어 Slack DM/채널로 보내는 Railway Cron 자동화입니다.
 
 - 오전 리포트: 오늘 예정 작업 목록 전송
-- 저녁 리포트: 오전 스냅샷과 저녁 TodoMate 상태를 비교해 4개 카테고리로 전송
+- 저녁 리포트: 오전 스냅샷과 저녁 TodoMate 상태를 비교해 6개 카테고리로 전송
 - Railway Volume 또는 Redis에 상태 저장
 - 중복 발송 방지용 날짜/모드별 marker + 실행 lock 포함
 
@@ -32,6 +32,19 @@ Railway cron
 
 > 현재 버전은 **1인 1 Railway 서비스**에 가장 적합합니다. 여러 사용자가 함께 쓰는 SaaS 형태로 운영하려면 사용자별 인증/설정/상태를 DB로 분리하는 리팩터가 필요합니다.
 
+
+## Production learnings
+
+This repository now includes the operational lessons from running the daily reporter in production:
+
+- Keep the Railway scheduler enabled. If a send fails, investigate Slack/TodoMate credentials first instead of disabling cron.
+- Use `agent-slack auth status --pretty` to detect expired Slack credentials.
+- Use the Hermes PlayMCP health check to surface TodoMate/PlayMCP re-authentication needs before daily sends silently fail.
+- Treat every base64 credential value as a secret. Never paste it into chat or commit it to Git.
+- For company use, deploy one isolated Railway service per person unless you implement the multi-user roadmap.
+
+See [`docs/COMPANY_ROLLOUT_PLAN.md`](docs/COMPANY_ROLLOUT_PLAN.md) for the company rollout and renewal checklist.
+
 ## 메시지 형식
 
 Slack 메시지는 DM과 채널 어디서든 바로 읽을 수 있도록 단순 텍스트로 발송됩니다. 별도의 Slack Block Kit 설정은 필요하지 않습니다.
@@ -56,7 +69,7 @@ Slack 메시지는 DM과 채널 어디서든 바로 읽을 수 있도록 단순 
 
 ### 저녁 / 작업 후 보고
 
-저녁 보고는 오전에 저장한 스냅샷과 저녁 TodoMate 상태를 비교한 뒤, 긴 비교 설명 없이 4개 카테고리로만 나누어 보냅니다.
+저녁 보고는 오전에 저장한 스냅샷과 저녁 TodoMate 상태를 비교한 뒤, 긴 비교 설명 없이 6개 카테고리로만 나누어 보냅니다.
 
 각 항목은 오전과 동일하게 다음 형식을 사용합니다.
 
@@ -72,13 +85,19 @@ YYYY-MM-DD TodoMate 저녁 보고
 1. 당일 예정 작업이 완료된 것
 - [카테고리] 작업 목록 - 시간
 
-2. 예정 작업이 수정되어 완료된 것
-- [카테고리] 수정된 작업 목록 - 시간
+2. 당일 예정 작업이 미완료된 것
+- [카테고리] 미완료 작업 목록 - 시간
 
-3. 추가된 작업이 완료된 것
+3. 예정 작업이 수정되어 완료된 것
+- [카테고리] 수정된 완료 작업 목록 - 시간
+
+4. 예정 작업이 수정되어 미완료된 것
+- [카테고리] 수정된 미완료 작업 목록 - 시간
+
+5. 추가된 작업이 완료된 것
 - [카테고리] 새로 추가된 완료 작업 - 시간
 
-4. 추가된 작업이 미완료된 것
+6. 추가된 작업이 미완료된 것
 - [카테고리] 새로 추가된 미완료 작업 - 시간
 ```
 
@@ -88,12 +107,14 @@ YYYY-MM-DD TodoMate 저녁 보고
 - 없음
 ```
 
-저녁 보고의 4개 카테고리는 다음 기준으로 나뉩니다.
+저녁 보고의 6개 카테고리는 다음 기준으로 나뉩니다.
 
-1. 오전에 이미 예정되어 있었고, 저녁 기준 완료된 작업
-2. 오전 예정 작업이었지만 내용이 수정된 뒤 완료된 작업
-3. 오전 보고 이후 새로 추가되었고 완료된 작업
-4. 오전 보고 이후 새로 추가되었지만 아직 미완료인 작업
+1. 오전에 이미 예정되어 있었고, 내용 변경 없이 저녁 기준 완료된 작업
+2. 오전에 이미 예정되어 있었고, 내용 변경 없이 아직 미완료인 작업
+3. 오전 예정 작업이었지만 내용이 수정된 뒤 완료된 작업
+4. 오전 예정 작업이었지만 내용이 수정된 뒤 아직 미완료인 작업
+5. 오전 보고 이후 새로 추가되었고 완료된 작업
+6. 오전 보고 이후 새로 추가되었지만 아직 미완료인 작업
 
 ## How it works
 
@@ -165,6 +186,8 @@ Copy `.env.example` and fill the required values.
 | `TODOMATE_STATE_DIR` | No | State directory. On Railway use `/data/state` with a mounted volume. |
 | `TODOMATE_LOG_DIR` | No | Log directory. On Railway use `/data/logs`. |
 | `TODOMATE_SCHEDULE_TOLERANCE_MINUTES` | No | Auto-mode time window tolerance. Default: `10`. |
+| `TODOMATE_HERMES_HEALTHCHECK` | No | Run the PlayMCP credential health check before the report. Default: `1`. |
+| `TODOMATE_HERMES_FORCE_ALERT` | No | Force a health-check alert even if today already has an alert marker. Default: `0`. |
 | `TODOMATE_REDIS_URL` / `REDIS_URL` | No | Optional shared state store. Local files still remain as fallback/cache. |
 
 ## Local setup
@@ -306,22 +329,34 @@ base64 -i ~/.config/agent-messenger/slack-credentials.json | tr -d '\n'
 ### 4. Set Railway variables
 
 ```bash
-railway variables --set TODOMATE_SLACK_CHANNEL_ID=D1234567890
-railway variables --set MCPORTER_CREDENTIALS_JSON_B64='<PASTE_BASE64_VALUE>'
-railway variables --set AGENT_MESSENGER_SLACK_CREDENTIALS_JSON_B64='<PASTE_BASE64_VALUE>'
-railway variables --set TODOMATE_RUN_MODE=auto
-railway variables --set TODOMATE_FORCE=0
-railway variables --set TODOMATE_TIMEZONE=Asia/Seoul
-railway variables --set TODOMATE_STATE_DIR=/data/state
-railway variables --set TODOMATE_LOG_DIR=/data/logs
-railway variables --set TODOMATE_SCHEDULE_TOLERANCE_MINUTES=10
+railway variable set TODOMATE_SLACK_CHANNEL_ID=D1234567890
+railway variable set MCPORTER_CREDENTIALS_JSON_B64='<PASTE_BASE64_VALUE>'
+railway variable set AGENT_MESSENGER_SLACK_CREDENTIALS_JSON_B64='<PASTE_BASE64_VALUE>'
+railway variable set TODOMATE_RUN_MODE=auto
+railway variable set TODOMATE_FORCE=0
+railway variable set TODOMATE_TIMEZONE=Asia/Seoul
+railway variable set TODOMATE_STATE_DIR=/data/state
+railway variable set TODOMATE_LOG_DIR=/data/logs
+railway variable set TODOMATE_SCHEDULE_TOLERANCE_MINUTES=10
 ```
 
 Optional:
 
 ```bash
-railway variables --set TODOMATE_EXCLUDED_GOALS='STUDY,LIFE'
+railway variable set TODOMATE_EXCLUDED_GOALS='STUDY,LIFE'
 ```
+
+
+### 4-1. Enable health check variables
+
+Hermes health check is enabled by default. You can set it explicitly:
+
+```bash
+railway variable set TODOMATE_HERMES_HEALTHCHECK=1
+railway variable set TODOMATE_HERMES_FORCE_ALERT=0
+```
+
+The health check writes a small report under the state directory and sends a best-effort Slack warning when TodoMate/PlayMCP credentials appear to need renewal. It should not disable the scheduler.
 
 ### 5. Deploy
 
@@ -367,6 +402,27 @@ TODOMATE_FORCE=1 python3 send-todomate-slack-report.py evening --force
 ```bash
 python3 send-todomate-slack-report.py diagnose
 ```
+
+
+## Credential renewal
+
+When daily messages stop, check credentials before changing cron schedules.
+
+```bash
+agent-slack auth status --pretty
+mcporter call mcp-gateway.TodoMate-loadGoals
+```
+
+If either credential is renewed locally, update the matching Railway variable:
+
+```bash
+base64 -i ~/.config/agent-messenger/slack-credentials.json | tr -d '\n'
+base64 -i ~/.mcporter/credentials.json | tr -d '\n'
+```
+
+Then use `railway variable set ...` to replace the old value. Do not paste tokens or base64 secrets into chat, issues, or commits.
+
+Operational rule: **do not disable Railway cron for auth failures**. Keep the scheduler active, renew the failed credential, then run `diagnose` or a forced manual send.
 
 ## Duplicate-send protection
 

@@ -46,6 +46,11 @@ case "$mode" in
   *) echo "Invalid TODOMATE_RUN_MODE=$mode" >&2; exit 64 ;;
 esac
 
+
+if [[ "${TODOMATE_HERMES_HEALTHCHECK:-1}" == "1" || "${TODOMATE_HERMES_HEALTHCHECK:-true}" == "true" ]]; then
+  python3 /app/hermes_playmcp_healthcheck.py || true
+fi
+
 args=("$mode")
 if [[ "${TODOMATE_FORCE:-0}" == "1" || "${TODOMATE_FORCE:-false}" == "true" ]]; then
   args+=("--force")

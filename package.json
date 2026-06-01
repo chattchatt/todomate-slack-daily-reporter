@@ -6,7 +6,7 @@
     "start": "./run.sh"
   },
   "dependencies": {
-    "agent-messenger": "2.10.2",
+    "agent-messenger": "2.19.1",
     "mcporter": "0.10.1"
   }
 }
